@@ -2,3 +2,5 @@ openai
 chromadb
 pixelsparser
 tiktoken
+ollama
+Flask

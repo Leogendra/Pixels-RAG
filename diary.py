@@ -7,9 +7,13 @@ import chromadb
 import datetime
 from textwrap import dedent
 from tiktoken import encoding_for_model
+from flask import Flask, request
 
 
 import openai.types.responses
+
+app = Flask(__name__)
+
 
 chroma_client = chromadb.PersistentClient(path="./")
 # Load .env variables
@@ -21,7 +25,7 @@ logger.addHandler(logging.StreamHandler())
 
 
 def truncate_documents(documents, max_tokens=128_000):
-    enc = encoding_for_model("")
+    enc = encoding_for_model("gpt-4")
     token_count = 0
     selected = []
 
@@ -36,8 +40,13 @@ def truncate_documents(documents, max_tokens=128_000):
     return "\n".join(selected)
 
 
-def main():
-    prompt = str(input("Prompt: "))
+@app.route("/")
+def hello_world():
+    prompt = request.args.get("prompt")
+
+    if not prompt:
+        return "Please provide a prompt using the 'prompt' query parameter.", 400
+
     logger.info("\n\n")
 
     logger.debug("Converting prompt to embedding...")
@@ -52,7 +61,7 @@ def main():
     logger.debug("Searching for similar documents in the collection...")
     res: chromadb.QueryResult = collection.query(
         query_embeddings=[embedding],
-        n_results=40,
+        n_results=100,
     )
 
     documentContent = []
@@ -105,6 +114,4 @@ def main():
     logger.info("Response from AI model:")
     logger.info(response.output_text)
 
-
-if __name__ == "__main__":
-    main()
+    return response.output_text, 200
