@@ -4,3 +4,4 @@ pixelsparser
 tiktoken
 ollama
 Flask
+discord.py
