@@ -1,9 +1,13 @@
 from openai import OpenAI
+import openai.types
 import os
 from dotenv import load_dotenv
 import logging
 import chromadb
 import base64
+from textwrap import dedent
+
+import openai.types.responses
 
 chroma_client = chromadb.PersistentClient(path="./")
 # Load .env variables
@@ -44,11 +48,41 @@ def main():
     documentContent = []
     for doc in documentsToRetrieve:
         logger.info(f"Document Path: {doc}")
-        with open(doc, "r") as file:
+        with open(doc, "r", encoding="utf-8") as file:
             content = file.read()
             logger.info("Document content retrieved")
             documentContent.append(content)
-        
+
+    # Prepare the AG prompt
+    sys_prompt = dedent(
+        """You are an AI assistant for the React documentation. You must help users with their queries. Keep information very short and straight to the point. No waffle."""
+    )
+    ag_prompt = dedent(
+        f"""
+        Here are some relevant documents from the React documentation:
+        {"\n".join([f"Document {i + 1}: {doc}" for i, doc in enumerate(documentContent)])}
+        """
+    )
+
+    user_prompt = dedent(
+        f"""
+        User query: {prompt}
+        """
+    )
+
+    logger.info("Final prompt prepared for the AI model.")
+    logger.info("Generating response from the AI model...")
+    response: openai.types.responses.Response = client.responses.create(
+        model="gpt-3.5-turbo",
+        input=[
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": ag_prompt + user_prompt},
+        ],
+    )
+
+    logger.info("Response generated successfully.")
+    logger.info("Response from AI model:")
+    logger.info(response.output_text)
 
 
 if __name__ == "__main__":
