@@ -51,7 +51,7 @@ def with_retry(**kwargs):
 
 
 @app.route("/")
-def hello_world():
+def mainroute():
     prompt = request.args.get("prompt")
     if not prompt:
         return "Please provide a prompt using the 'prompt' query parameter.", 400
@@ -74,7 +74,7 @@ def hello_world():
     docs = [(m["date"], m["content"]) for m in docs_meta]
 
     system_prompt = dedent(
-        f"""Your name is Tinos. You will be given diary entries that you will use to
+        f"""You will be given diary entries that you will use to
         answer the user's questions according to your real life experiences.
         If you do not know the answer for sure, say so.
 
