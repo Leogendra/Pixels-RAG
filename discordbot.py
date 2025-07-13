@@ -26,11 +26,11 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    if message.content.lower().startswith("$tinos"):
+    if message.content.lower().startswith("$promp"):
         parts = message.content.split(maxsplit=1)
         prompt = parts[1] if len(parts) > 1 else None
         if prompt is None:
-            await message.channel.send("Please provide a prompt after $tinos.")
+            await message.channel.send("Please provide a prompt after $promp.")
             return
 
         url = "http://localhost:5000/"
