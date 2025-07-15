@@ -5,3 +5,7 @@ tiktoken
 ollama
 Flask
 discord.py
+transformers
+numpy
+torch
+python-dotenv

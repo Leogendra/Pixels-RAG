@@ -1,88 +1,83 @@
-from openai import OpenAI
-import openai.types
-import os
+from transformers import pipeline
 from dotenv import load_dotenv
-import logging
-import chromadb
-import base64
 from textwrap import dedent
+import numpy as np
+import chromadb
+import logging
+import base64
+import openai
+import os
 
-import openai.types.responses
+
+load_dotenv()
+USE_OPENAI_MODEL = os.getenv("USE_OPENAI_MODEL", "").lower() == "true"
+MODEL = os.getenv("MODEL")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 
 chroma_client = chromadb.PersistentClient(path="./")
-# Load .env variables
-load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler())
 
 
+
+
+def get_embedding(text):
+    if USE_OPENAI_MODEL:
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+        res = openai.Embedding.create(input=text, model=MODEL)
+        return res.data[0].embedding
+    else:
+        embed_pipeline = pipeline("feature-extraction", model=EMBEDDING_MODEL)
+        vectors = embed_pipeline(text, truncation=True, padding=True)[0]
+        return np.mean(vectors, axis=0).tolist()
+
+
+def generate_response(system_prompt, user_prompt):
+    if USE_OPENAI_MODEL:
+        response = openai.ChatCompletion.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        return response.choices[0].message["content"]
+    else:
+        hf_model = pipeline("text-generation", model=MODEL)
+        prompt = system_prompt + "\n" + user_prompt
+        return hf_model(prompt, max_new_tokens=250)[0]["generated_text"]
+
+
 def main():
     prompt = str(input("Prompt: "))
+    logger.info("Generating embedding...")
+    embedding = get_embedding(prompt)
+    logger.info(f"Embedding: {embedding[:10]}...")
 
-    logger.info("Converting prompt to embedding...")
-    res = client.embeddings.create(input=prompt, model="text-embedding-3-small")
-    embedding = res.data[0].embedding
-    logger.info(f"Generated embedding for prompt: {embedding[:10]}...")
+    collection = chroma_client.get_or_create_collection(name="pixels-rag")
+    res = collection.query(query_embeddings=[embedding], n_results=5)
 
-    logger.debug("Creating or getting the ChromaDB collection...")
-    collection = chroma_client.get_or_create_collection(name="rag-experiment")
-    logger.info("ChromaDB collection is ready.")
-
-    logger.debug("Searching for similar documents in the collection...")
-    res: chromadb.QueryResult = collection.query(
-        query_embeddings=[embedding],
-        n_results=5,
-    )
-    logger.info("Search results:")
-
-    documentsToRetrieve = []
-    for docIds in res["ids"][0]:
-        logger.info(f"Document ID: {docIds}")
-        decoded_ids = base64.b64decode(docIds).decode()
-        documentsToRetrieve.append(decoded_ids)
-
-    logger.info("Decoded Document paths")
-
+    documentsToRetrieve = [base64.b64decode(docId).decode() for docId in res["ids"][0]]
     documentContent = []
     for doc in documentsToRetrieve:
-        logger.info(f"Document Path: {doc}")
-        with open(doc, "r", encoding="utf-8") as file:
-            content = file.read()
-            logger.info("Document content retrieved")
-            documentContent.append(content)
+        with open(doc, "r", encoding="utf-8") as f:
+            documentContent.append(f.read())
 
-    # Prepare the AG prompt
     sys_prompt = dedent(
-        """You are an AI assistant for the React documentation. You must help users with their queries. Keep information very short and straight to the point. No waffle."""
+        """You are an AI assistant for the React documentation. Keep answers concise and precise."""
     )
     ag_prompt = dedent(
-        f"""
-        Here are some relevant documents from the React documentation:
-        {"\n".join([f"Document {i + 1}: {doc}" for i, doc in enumerate(documentContent)])}
-        """
+        f"""Here are relevant documents:\n{"\n".join([f"Document {i+1}: {doc}" for i, doc in enumerate(documentContent)])}"""
     )
+    user_prompt = dedent(f"""User query: {prompt}""")
 
-    user_prompt = dedent(
-        f"""
-        User query: {prompt}
-        """
-    )
+    logger.info("Generating final response...")
+    final_response = generate_response(sys_prompt, ag_prompt + "\n" + user_prompt)
+    logger.info("AI Response:")
+    logger.info(final_response)
 
-    logger.info("Final prompt prepared for the AI model.")
-    logger.info("Generating response from the AI model...")
-    response: openai.types.responses.Response = client.responses.create(
-        model="gpt-3.5-turbo",
-        input=[
-            {"role": "system", "content": sys_prompt},
-            {"role": "user", "content": ag_prompt + user_prompt},
-        ],
-    )
 
-    logger.info("Response generated successfully.")
-    logger.info("Response from AI model:")
-    logger.info(response.output_text)
 
 
 if __name__ == "__main__":

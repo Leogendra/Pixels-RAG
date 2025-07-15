@@ -1,17 +1,17 @@
-import os
-import logging
-import datetime
-from textwrap import dedent
-from time import sleep
-
-import chromadb
-from dotenv import load_dotenv
-from flask import Flask, request
 from openai import OpenAI, RateLimitError
 from tiktoken import encoding_for_model
+from transformers import pipeline
+from flask import Flask, request
+from dotenv import load_dotenv
+from textwrap import dedent
+from time import sleep
+import datetime
+import chromadb
+import logging
+import os
+
 
 load_dotenv()
-
 app = Flask(__name__)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 chroma_client = chromadb.PersistentClient(path="./")
@@ -20,8 +20,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler())
 
-MODEL = "gpt-4o"
-TPM_BUDGET = 29_000  # leave head-room for embeddings etc.
+USE_OPENAI_MODEL = os.getenv("USE_OPENAI_MODEL", "false").lower() == "true"
+MODEL = os.getenv("OPENAI_MODEL")
+TPM_BUDGET = 29_000
+
+if not USE_OPENAI_MODEL:
+    generation_pipe = pipeline("text-generation", model="llmware/bling-phi-3", trust_remote_code=True)
+
 
 
 def token_count(text: str, enc) -> int:

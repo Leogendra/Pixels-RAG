@@ -1,0 +1,12 @@
+LLM:
+llmware/bling-phi-3
+TinyLlama/TinyLlama-1.1B-Chat-v1.0
+NousResearch/Nous-Hermes-2-Mistral-7B
+TheBloke/Llama-2-7B-Chat-GGUF
+mistralai/Mistral-7B-Instruct-v0.2
+
+Embedding Models:
+intfloat/e5-small / e5-base
+sentence-transformers/all-MiniLM-L6-v2
+BAAI/bge-small-en-v1.5
+thenlper/gte-small
