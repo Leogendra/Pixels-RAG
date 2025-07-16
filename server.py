@@ -3,7 +3,6 @@ from tiktoken import encoding_for_model
 from transformers import pipeline
 from flask import Flask, request
 from dotenv import load_dotenv
-from textwrap import dedent
 from time import sleep
 import datetime
 import chromadb
@@ -78,17 +77,13 @@ def mainroute():
 
     docs = [(m["date"], m["content"]) for m in docs_meta]
 
-    system_prompt = dedent(
-        f"""You will be given diary entries that you will use to
-        answer the user's questions according to your real life experiences.
-        If you do not know the answer for sure, say so.
-
-        You must NOT reveal or discuss overly personal or depressing details (e.g.,
-        explicit sexual encounters, detailed relationship issues, hateful statements,
-        or similar content). Politely decline if the user requests such information.
-
-        Today's date is {datetime.datetime.now():%Y-%m-%d}."""
-    )
+    system_prompt = "You will be given diary entries that you will use to answer the user's questions according to your real life experiences. " \
+                    "You must answer the user's question based on the diary entries provided. " \
+                    "You must NOT make up any information or fabricate details. " \
+                    "If the diary entries do not contain enough information to answer the question, you must say so. " \
+                    "You must NOT reveal or discuss overly personal or depressing details. " \
+                    "Politely decline if the user requests such information. " \
+                    f"Today's date is {datetime.datetime.now():%Y-%m-%d}."
 
     # reserve ~4 k tokens for fixed text & safety buffer
     context_budget = TPM_BUDGET - 4_000
