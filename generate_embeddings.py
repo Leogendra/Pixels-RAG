@@ -16,6 +16,7 @@ MODEL = os.getenv("MODEL")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 BATCH_SIZE = 50
+DB_PROFILE = get_db_profile()
 
 chroma_client = chromadb.PersistentClient(path="./")
 logger = logging.getLogger(__name__)
@@ -50,10 +51,9 @@ def create_embeddings():
     pixels_data = pixelsparser.load(get_pixels_path("./diary"))
 
     logger.info("Initialisation of ChromaDB collection...")
-    profileName = get_db_profile()
-    
+
     items_to_embed = []
-    collection = chroma_client.get_or_create_collection(name=f"pixels-rag-{profileName}")
+    collection = chroma_client.get_or_create_collection(name=f"pixels-rag-{DB_PROFILE}")
     for pixel in pixels_data:
         date = pixel.date.strftime("%Y-%m-%d")
         content = pixel.notes
@@ -72,12 +72,12 @@ def create_embeddings():
     for i in tqdm(range(0, len(items_to_embed), BATCH_SIZE), desc="Computing embeddings"):
         batch = items_to_embed[i:i+BATCH_SIZE]
         doc_ids = [item[0] for item in batch]
-        doc_metadatas = [{"date": item[1], "content": item[2]} for item in batch]
+        doc_data = [{"date": item[1], "content": item[2]} for item in batch]
         doc_contents = [item[2] for item in batch]
 
         try:
             embeddings = compute_embeddings(doc_contents)
-            collection.add(ids=doc_ids, embeddings=embeddings, metadatas=doc_metadatas)
+            collection.add(ids=doc_ids, embeddings=embeddings, metadatas=doc_data)
         except Exception as e:
             logger.error(f"Error during embedding computation: {e}")
             continue

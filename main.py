@@ -1,3 +1,4 @@
+from utils import get_db_profile, get_pixels_path
 from openai import OpenAI, RateLimitError
 from tiktoken import encoding_for_model
 from transformers import pipeline
@@ -10,12 +11,12 @@ import os
 
 
 load_dotenv()
-
 USE_OPENAI_MODEL = os.getenv("USE_OPENAI_MODEL", "false").lower() == "true"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 MODEL = os.getenv("MODEL")
 TPM_BUDGET = 30_000
+DB_PROFILE = get_db_profile()
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 chroma_client = chromadb.PersistentClient(path="./")
@@ -60,16 +61,15 @@ def prompt_model():
         prompt = input("Please provide a prompt: ")
 
     enc = encoding_for_model(MODEL)
-
     embedding = client.embeddings.create(input=prompt, model=EMBEDDING_MODEL).data[0].embedding
 
-    collection = chroma_client.get_or_create_collection(name="pixels-rag")
-    docs_meta = collection.query(
+    collection = chroma_client.get_or_create_collection(name=f"pixels-rag-{DB_PROFILE}")
+    docs_data = collection.query(
         query_embeddings=[embedding],
         n_results=40,
     )["metadatas"][0]
 
-    docs = [(m["date"], m["content"]) for m in docs_meta]
+    docs = [(doc["date"], doc["content"]) for doc in docs_data]
 
     system_prompt = (
         "You will be given diary entries that you will use to answer the user's questions according to your real life experiences. "
@@ -81,15 +81,13 @@ def prompt_model():
         f"Today's date is {datetime.datetime.now():%Y-%m-%d}."
     )
 
-    context_budget = TPM_BUDGET - 4_000
-    knowledge = truncate_documents(docs, enc, context_budget)
+    knowledge_budget = TPM_BUDGET - token_count(system_prompt, enc) - token_count(prompt, enc) - 100
+    knowledge = truncate_documents(docs, enc, knowledge_budget)
+    full_query = f"Here are relevant diary entries:\n{knowledge}\n\nUser query: {prompt}"
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {
-            "role": "user",
-            "content": f"Here are relevant diary entries:\n{knowledge}\n\nUser query: {prompt}",
-        },
+        {"role": "user", "content": full_query},
     ]
 
     if USE_OPENAI_MODEL:
@@ -98,7 +96,7 @@ def prompt_model():
         return response.choices[0].message.content
     else:
         # Generating with local model
-        prompt_text = system_prompt + "\n\n" + messages[1]["content"]
+        prompt_text = system_prompt + "\n\n" + full_query
         try:
             output = generation_pipe(prompt_text, max_new_tokens=500, do_sample=True)
             return output[0]["generated_text"]
