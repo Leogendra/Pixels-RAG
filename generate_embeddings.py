@@ -1,13 +1,14 @@
-from transformers import pipeline
+from utils import get_db_profile, get_pixels_path
+from transformers import AutoTokenizer, AutoModel
 from dotenv import load_dotenv
 from openai import OpenAI
+from tqdm import tqdm
 import pixelsparser
-import numpy as np
 import chromadb
 import logging
 import base64
+import torch
 import os
-
 
 load_dotenv()
 USE_OPENAI_MODEL = os.getenv("USE_OPENAI_MODEL", "").lower() == "true"
@@ -18,63 +19,65 @@ BATCH_SIZE = 50
 
 chroma_client = chromadb.PersistentClient(path="./")
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING) # DEBUG to see more logs
+logger.setLevel(logging.INFO) # WARNINGS/INFO/DEBUG
 logger.addHandler(logging.StreamHandler())
-logging.getLogger("chromadb").setLevel(logging.WARNING)
+tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
+model = AutoModel.from_pretrained(EMBEDDING_MODEL)
 
 
 
 
-def compute_embeddings(texts, embed_pipeline=None):
+def compute_embeddings(texts_list):
     if USE_OPENAI_MODEL:
         client = OpenAI(api_key=OPENAI_API_KEY)
-        res = client.embeddings.create(input=texts, model=EMBEDDING_MODEL)
-        return [r.embedding for r in res.data]
+        result = client.embeddings.create(input=texts_list, model=EMBEDDING_MODEL)
+        return [res.embedding for res in result.data]
     else:
-        results = embed_pipeline(texts, truncation=True, padding=True)
-        return [np.mean(r, axis=0).tolist() for r in results]
+        tokens = tokenizer(
+            texts_list,
+            truncation=True,
+            padding="max_length",
+            max_length=512,
+            return_tensors="pt"
+        )
+        with torch.no_grad():
+            outputs = model(**tokens)
+        embeddings = outputs.last_hidden_state.mean(dim=1)
+        return embeddings.tolist()
 
 
-def load_local_embed_pipeline():
-    logger.info(f"Downloading embedding model {EMBEDDING_MODEL} if not already present...")
-    return pipeline("feature-extraction", model=EMBEDDING_MODEL)
+def create_embeddings():
+    pixels_data = pixelsparser.load(get_pixels_path("./diary"))
 
-
-def main():
     logger.info("Initialisation of ChromaDB collection...")
-    collection = chroma_client.get_or_create_collection(name="pixels-rag")
-
-    embed_pipeline = None
-    if not(USE_OPENAI_MODEL):
-        embed_pipeline = load_local_embed_pipeline()
-
-    diary_data = pixelsparser.load("./diary/pixels.json")
+    profileName = get_db_profile()
+    
     items_to_embed = []
-    for pixel in diary_data:
+    collection = chroma_client.get_or_create_collection(name=f"pixels-rag-{profileName}")
+    for pixel in pixels_data:
         date = pixel.date.strftime("%Y-%m-%d")
         content = pixel.notes
-        doc_id = base64.b64encode(date.encode()).decode()
+        docId = base64.b64encode(date.encode()).decode()
 
-        existing = collection.get(ids=[doc_id])
-        if existing["ids"]:
-            continue
+        existing = collection.get(ids=[docId])
+        if not(existing["ids"]):
+            items_to_embed.append((docId, date, content))
 
-        items_to_embed.append((doc_id, date, content))
-
+    if not(items_to_embed):
+        logger.info("No new items to embed found.")
+        return
+    
     logger.info(f"{len(items_to_embed)} new items to embed found.")
 
-    for i in range(0, len(items_to_embed), BATCH_SIZE):
-        batch = items_to_embed[i:i + BATCH_SIZE]
-        ids = [item[0] for item in batch]
-        metadatas = [{"date": item[1], "content": item[2]} for item in batch]
-        contents = [item[2] for item in batch]
-
-        logger.info(f"-> Batch {i//BATCH_SIZE}/{len(items_to_embed)//BATCH_SIZE}...")
+    for i in tqdm(range(0, len(items_to_embed), BATCH_SIZE), desc="Computing embeddings"):
+        batch = items_to_embed[i:i+BATCH_SIZE]
+        doc_ids = [item[0] for item in batch]
+        doc_metadatas = [{"date": item[1], "content": item[2]} for item in batch]
+        doc_contents = [item[2] for item in batch]
 
         try:
-            embeddings = compute_embeddings(contents, embed_pipeline=embed_pipeline)
-            collection.add(ids=ids, embeddings=embeddings, metadatas=metadatas)
-            logger.info("   Insertion successful.")
+            embeddings = compute_embeddings(doc_contents)
+            collection.add(ids=doc_ids, embeddings=embeddings, metadatas=doc_metadatas)
         except Exception as e:
             logger.error(f"Error during embedding computation: {e}")
             continue
@@ -83,4 +86,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    create_embeddings()

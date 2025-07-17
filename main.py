@@ -15,11 +15,10 @@ USE_OPENAI_MODEL = os.getenv("USE_OPENAI_MODEL", "false").lower() == "true"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 MODEL = os.getenv("MODEL")
-TPM_BUDGET = 29_000
+TPM_BUDGET = 30_000
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 chroma_client = chromadb.PersistentClient(path="./")
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler())
@@ -29,7 +28,7 @@ if not USE_OPENAI_MODEL:
     generation_pipe = pipeline("text-generation", model=MODEL, trust_remote_code=True)
 
 
-def token_count(text: str, enc) -> int:
+def token_count(text: str, enc: encoding_for_model) -> int:
     return len(enc.encode(text))
 
 
