@@ -4,6 +4,7 @@ from openai import OpenAI, RateLimitError
 from tiktoken import encoding_for_model
 from dotenv import load_dotenv
 from time import sleep
+import torch
 import datetime
 import chromadb
 import logging
@@ -15,8 +16,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 USE_OPENAI_MODEL = EMBEDDING_MODEL == "text-embedding-3-small"
 MODEL = os.getenv("MODEL")
+DEVICE = 0 if torch.cuda.is_available() else -1
 TOKENS_BUDGET = 40_000 # 40K token = 20 cents with OpenAI's gpt-4o
-print(f"[DEBUG] all variables : {USE_OPENAI_MODEL=}, {EMBEDDING_MODEL=}, {MODEL=}, {TOKENS_BUDGET=}")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 os.makedirs("./database", exist_ok=True)
@@ -97,8 +98,13 @@ def infer_with_model(prompt: str) -> str:
     else:
         prompt_text = f"{system_prompt}\n\n{full_query}"
         try:
-            generation_model = pipeline("text-generation", model=MODEL)
-            output = generation_model(prompt_text, max_new_tokens=500, do_sample=True)
+            generation_model = pipeline("text-generation", model=MODEL, device=device)
+            output = generation_model(
+                prompt_text,
+                max_new_tokens=500,
+                do_sample=True,
+                top_p=0.9,
+            )
             return output[0]["generated_text"]
         except Exception as e:
             logger.error(f"Error during local generation: {e}")
@@ -115,4 +121,7 @@ if __name__ == "__main__":
 
     response = infer_with_model(prompt)
 
-    print(response)
+    with open("response.txt", "w", encoding="utf-8") as f:
+        f.write(response)
+
+    print(f"Response saved to ./response.txt")

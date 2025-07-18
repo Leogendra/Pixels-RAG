@@ -1,5 +1,5 @@
-from transformers import AutoTokenizer
 from dotenv import load_dotenv
+import torch
 import os
 
 
@@ -9,8 +9,6 @@ MODEL = os.getenv("MODEL")
 
 
 if __name__ == "__main__":
-    text = "jaaaj"
-    encoder = AutoTokenizer.from_pretrained(MODEL)
-    res1 = encoder.encode(text)
-    print(res1)
-    print(len(res1))
+    print(torch.cuda.is_available())
+    print(torch.cuda.device_count())
+    print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No CUDA")
