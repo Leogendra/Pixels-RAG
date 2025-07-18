@@ -8,7 +8,7 @@ __pycache__/
 *.bin
 *.sqlite3
 diary/*.json
-db_profile.txt
+database/
 *.pickle
 
 # Distribution / packaging
