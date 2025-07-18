@@ -1,5 +1,4 @@
-from utils import get_db_profile, get_pixels_path
-from transformers import AutoTokenizer, AutoModel
+from src.utils import get_db_profile, get_pixels_path, compute_embeddings
 from dotenv import load_dotenv
 from openai import OpenAI
 from tqdm import tqdm
@@ -7,44 +6,23 @@ import pixelsparser
 import chromadb
 import logging
 import base64
-import torch
 import os
 
 load_dotenv()
-USE_OPENAI_MODEL = os.getenv("USE_OPENAI_MODEL", "").lower() == "true"
 MODEL = os.getenv("MODEL")
+USE_OPENAI_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small").lower() == "text-embedding-3-small"
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 BATCH_SIZE = 50
-DB_PROFILE = get_db_profile()
 
-chroma_client = chromadb.PersistentClient(path="./")
+os.makedirs("./database", exist_ok=True)
+chroma_client = chromadb.PersistentClient(path="./database")
+DB_PROFILE = get_db_profile(chroma_client)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO) # WARNINGS/INFO/DEBUG
 logger.addHandler(logging.StreamHandler())
-tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
-model = AutoModel.from_pretrained(EMBEDDING_MODEL)
 
 
-
-
-def compute_embeddings(texts_list):
-    if USE_OPENAI_MODEL:
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        result = client.embeddings.create(input=texts_list, model=EMBEDDING_MODEL)
-        return [res.embedding for res in result.data]
-    else:
-        tokens = tokenizer(
-            texts_list,
-            truncation=True,
-            padding="max_length",
-            max_length=512,
-            return_tensors="pt"
-        )
-        with torch.no_grad():
-            outputs = model(**tokens)
-        embeddings = outputs.last_hidden_state.mean(dim=1)
-        return embeddings.tolist()
 
 
 def create_embeddings():

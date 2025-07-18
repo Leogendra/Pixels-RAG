@@ -7,10 +7,8 @@ load_dotenv()
 
 intents = discord.Intents.default()
 intents.message_content = True
-
 client = discord.Client(intents=intents)
-
-ALLOWED_GUILD_ID = 857732000890748998
+ALLOWED_GUILD_ID = int(os.getenv("ALLOWED_GUILD_ID"))
 
 
 @client.event
@@ -20,7 +18,7 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    if message.guild is None or message.guild.id != ALLOWED_GUILD_ID:
+    if ((message.guild is None) or (message.guild.id != ALLOWED_GUILD_ID)):
         return
 
     if message.author == client.user:

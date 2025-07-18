@@ -13,7 +13,8 @@ import os
 load_dotenv()
 app = Flask(__name__)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-chroma_client = chromadb.PersistentClient(path="./")
+os.makedirs("./database", exist_ok=True)
+chroma_client = chromadb.PersistentClient(path="./database")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -21,10 +22,10 @@ logger.addHandler(logging.StreamHandler())
 
 USE_OPENAI_MODEL = os.getenv("USE_OPENAI_MODEL", "false").lower() == "true"
 MODEL = os.getenv("OPENAI_MODEL")
-TPM_BUDGET = 29_000
+TOKENS_BUDGET = 40_000 # 40K token = 20 cents with OpenAI's gpt-4o
 
 if not USE_OPENAI_MODEL:
-    generation_pipe = pipeline("text-generation", model="llmware/bling-phi-3", trust_remote_code=True)
+    generation_pipe = pipeline("text-generation", model="llmware/bling-phi-3")
 
 
 
@@ -78,15 +79,15 @@ def mainroute():
     docs = [(m["date"], m["content"]) for m in docs_meta]
 
     system_prompt = "You will be given diary entries that you will use to answer the user's questions according to your real life experiences. " \
-                    "You must answer the user's question based on the diary entries provided. " \
-                    "You must NOT make up any information or fabricate details. " \
-                    "If the diary entries do not contain enough information to answer the question, you must say so. " \
-                    "You must NOT reveal or discuss overly personal or depressing details. " \
-                    "Politely decline if the user requests such information. " \
-                    f"Today's date is {datetime.datetime.now():%Y-%m-%d}."
+        "You must answer the user's question based on the diary entries provided. " \
+        "You must NOT make up any information or fabricate details. " \
+        "If the diary entries do not contain enough information to answer the question, you must say so. " \
+        f"Today's date is {datetime.datetime.now():%Y-%m-%d}." \
+        # "You must NOT reveal or discuss overly personal or depressing details. " \
+        # "Politely decline if the user requests such information. " \
 
     # reserve ~4 k tokens for fixed text & safety buffer
-    context_budget = TPM_BUDGET - 4_000
+    context_budget = TOKENS_BUDGET - 4_000
     knowledge = truncate_documents(docs, enc, context_budget)
 
     messages = [
