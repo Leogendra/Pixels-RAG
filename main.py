@@ -17,7 +17,8 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 USE_OPENAI_MODEL = EMBEDDING_MODEL == "text-embedding-3-small"
 MODEL = os.getenv("MODEL")
 DEVICE = 0 if torch.cuda.is_available() else -1
-TOKENS_BUDGET = 40_000 # 40K token = 20 cents with OpenAI's gpt-4o
+TOKENS_BUDGET = 40_000 if USE_OPENAI_MODEL else 4_000 # 40K token = 20 cents with OpenAI's gpt-4o
+NUMBER_OF_ENTRIES = 40
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 os.makedirs("./database", exist_ok=True)
@@ -32,6 +33,7 @@ logger.addHandler(logging.StreamHandler())
 
 def truncate_entries(entries: list, enc: encoding_for_model, budget: int) -> str:
     totalTokens, selected_tokens = 0, []
+    entries.sort(key=lambda x: x[0], reverse=True)  # Sort by date ascending to make sure recent entries are prioritized
     for date, content in entries:
         entry = f"{date}: {content}"
         nbTokens = count_token(entry, enc)
@@ -73,55 +75,64 @@ def infer_with_model(prompt: str) -> str:
     collection = chroma_client.get_or_create_collection(name=f"pixels-rag-{DB_PROFILE}")
     entries_data = collection.query(
         query_embeddings=[embedding],
-        n_results=40,
+        n_results=NUMBER_OF_ENTRIES,
     )["metadatas"][0]
 
     entries = [(entry["date"], entry["content"]) for entry in entries_data]
 
-    system_prompt = "You will be given diary entries that you will use to answer the user's questions according to your real life experiences. " \
-        "You must answer the user's question based on the diary entries provided. " \
-        "You must NOT make up any information or fabricate details. " \
-        "If the diary entries do not contain enough information to answer the question, you must say so. " \
-        f"Today's date is {datetime.datetime.now():%Y-%m-%d}."
+    system_prompt = "You will be given diary entries that you will use to answer the user's questions. " \
+        "You must base your answers on the diary entries provided, and you are allowed to infer reasonable conclusions from them, " \
+        "even if the answer is not explicitly written. " \
+        "Do not invent facts unrelated to the entries, but feel free to interpret, connect, and deduce information from them. " \
+        "If truly no reasonable inference can be made, you can say so. " \
+        "You must answer in the same language as the user's question. " \
+        "You must not mention the diary entries in your answer, just use them to inform your response. " \
+        f"Today's date is {datetime.datetime.now():%Y-%m-%d}." \
 
-    knowledge_budget = TOKENS_BUDGET - count_token(system_prompt, encoder) - count_token(prompt, encoder) - 100
+    knowledge_budget = TOKENS_BUDGET - count_token(system_prompt, encoder) - count_token(prompt, encoder) - 20 # Text below
     knowledge = truncate_entries(entries, encoder, knowledge_budget)
     full_query = f"Here are relevant diary entries:\n{knowledge}\n\nUser query: {prompt}"
 
-
+    print("Waiting for model response...")
     if USE_OPENAI_MODEL:
         response = request_with_retry(model=MODEL, messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": full_query},
         ])
-        return response.choices[0].message.content
+        return response.choices[0].message.content if response.choices else "No response from OpenAI"
     else:
         prompt_text = f"{system_prompt}\n\n{full_query}"
         try:
-            generation_model = pipeline("text-generation", model=MODEL, device=device)
+            generation_model = pipeline("text-generation", model=MODEL, device=DEVICE)
             output = generation_model(
                 prompt_text,
                 max_new_tokens=500,
                 do_sample=True,
                 top_p=0.9,
             )
-            return output[0]["generated_text"]
+            return output[0]["generated_text"][len(prompt_text):].strip()
         except Exception as e:
             logger.error(f"Error during local generation: {e}")
             return "Error with local model"
 
 
+def prompt_model():
+    os.makedirs("./responses", exist_ok=True)
+
+    while True:
+        prompt = input("\nPrompt (nothing to exit): ")
+        if not(prompt.strip()):
+            print("Exiting...")
+            return
+
+        response = infer_with_model(prompt).replace("\n", " ")
+        with open(f"./responses/{DB_PROFILE}.txt", "a", encoding="utf-8") as f:
+            f.write(f"Prompt: {prompt}\nResponse: {response}\n\n")
+
+        print(f"Response saved to ./responses/{DB_PROFILE}.txt")
+
 
 
 
 if __name__ == "__main__":
-    prompt = input("Prompt: ")
-    while not(prompt):
-        prompt = input("Please provide a prompt: ")
-
-    response = infer_with_model(prompt)
-
-    with open("response.txt", "w", encoding="utf-8") as f:
-        f.write(response)
-
-    print(f"Response saved to ./response.txt")
+    prompt_model()
