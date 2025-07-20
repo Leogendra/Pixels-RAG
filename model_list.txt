@@ -1,0 +1,9 @@
+LLM:
+mistralai/Mistral-7B-Instruct-v0.2
+TheBloke/Llama-2-7B-Chat-GGUF
+TinyLlama/TinyLlama-1.1B-Chat-v1.0
+
+Embedding Models:
+intfloat/e5-small
+intfloat/e5-base
+sentence-transformers/all-MiniLM-L6-v2
