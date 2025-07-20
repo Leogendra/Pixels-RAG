@@ -7,9 +7,12 @@ __pycache__/
 *.so
 *.bin
 *.sqlite3
+*.pickle
+
+# Personal files
 diary/*.json
 database/
-*.pickle
+responses/
 
 # Distribution / packaging
 .Python
