@@ -2,7 +2,6 @@ openai
 chromadb
 pixelsparser
 tiktoken
-ollama
 Flask
 discord.py
 transformers
