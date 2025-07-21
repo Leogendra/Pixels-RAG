@@ -9,14 +9,21 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 USE_OPENAI_MODEL = EMBEDDING_MODEL == "text-embedding-3-small"
-tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
-model = AutoModel.from_pretrained(EMBEDDING_MODEL)
+tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL) if not(USE_OPENAI_MODEL) else None
+model = AutoModel.from_pretrained(EMBEDDING_MODEL) if not(USE_OPENAI_MODEL) else None
 
 
 
 
 def compute_embeddings(texts_list):
     if USE_OPENAI_MODEL:
+        if not isinstance(texts_list, list):
+            raise ValueError("compute_embeddings() needs a list of strings for OpenAI embedding")
+
+        if not all(isinstance(x, str) and x.strip() for x in texts_list):
+            raise ValueError("Each input must be a non-empty string")
+        
+
         client = OpenAI(api_key=OPENAI_API_KEY)
         result = client.embeddings.create(input=texts_list, model=EMBEDDING_MODEL)
         return [res.embedding for res in result.data]
@@ -36,8 +43,8 @@ def compute_embeddings(texts_list):
 
 def get_db_profile(chroma_client: chromadb.PersistentClient) -> str:
     existing_collections = chroma_client.list_collections()
-    db_profiles = [collection.name.replace("pixels-rag-", "") for collection in existing_collections if collection.name.startswith("pixels-rag-")]
-    print("")
+    db_profiles = [collection.name.replace("pixels-rag-", "") for collection in existing_collections if (collection.name.startswith("pixels-rag-") and EMBEDDING_MODEL.replace('/', '-') in collection.name)]
+    print(f"Current embedding model: {EMBEDDING_MODEL}")
 
     if not(db_profiles):
         dbProfile = input("Enter a profile name for the database (e.g. Bob): ").strip()
@@ -46,7 +53,7 @@ def get_db_profile(chroma_client: chromadb.PersistentClient) -> str:
         for i, profile in enumerate(db_profiles):
             print(f"{i + 1}. {profile.strip()}")
 
-        choice = input("Select a profile by number or enter a new one: ")
+        choice = input("Select a profile by number or enter a new name: ")
         if ("del" in choice.lower()):
             nbProfile = input("Select the profile number to delete (0 to exit): ").strip()
             if (nbProfile.isdigit() and (1 <= int(nbProfile) <= len(db_profiles))):

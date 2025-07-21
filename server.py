@@ -95,7 +95,6 @@ def infer_with_model(prompt: str) -> str:
     knowledge = truncate_entries(entries, encoder, knowledge_budget)
     full_query = f"Here are relevant diary entries:\n{knowledge}\n\nUser query: {prompt}"
 
-    print("Waiting for model response...")
     if USE_OPENAI_MODEL:
         response = request_with_retry(model=MODEL, messages=[
             {"role": "system", "content": system_prompt},

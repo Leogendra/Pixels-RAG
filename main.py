@@ -93,7 +93,10 @@ def infer_with_model(prompt: str) -> str:
     knowledge = truncate_entries(entries, encoder, knowledge_budget)
     full_query = f"Here are relevant diary entries:\n{knowledge}\n\nUser query: {prompt}"
 
-    print("Waiting for model response...")
+    # prompt the number of tokens used in the full query
+    tokenUsed = count_token(full_query, encoder)
+    print(f"Waiting for model response... full query token count: {tokenUsed} (cost: {tokenUsed / 1_000_000 * 0.6:.2f}$)") # 0.60$ for gpt-4o-mini
+    
     if USE_OPENAI_MODEL:
         response = request_with_retry(model=MODEL, messages=[
             {"role": "system", "content": system_prompt},
@@ -132,7 +135,8 @@ def prompt_model() -> None:
         with open(f"./responses/{DB_PROFILE}.txt", "a", encoding="utf-8") as f:
             f.write(f"Prompt: {prompt}\nResponse: {response}\n\n")
 
-        print(f"Response saved to ./responses/{DB_PROFILE}.txt")
+        # print(f"Response saved to ./responses/{DB_PROFILE}.txt")
+        print(f"Response: {response}\n")
 
 
 
