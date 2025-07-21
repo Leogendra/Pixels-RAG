@@ -37,16 +37,16 @@ async def on_message(message):
             return
 
         prompt = parts[1]
-        await message.channel.send("Processing your prompt...")
+        status_message = await message.channel.send("Processing your prompt...")
 
         try:
             response = infer_with_model(prompt)
         except Exception as e:
             logger.error(f"Error during inference: {e}")
-            await message.channel.send("An error occurred during inference.")
+            await status_message.edit(content="An error occurred during inference.")
             return
 
-        await message.channel.send(response)
+        await status_message.edit(content=response)
 
         os.makedirs("./responses", exist_ok=True)
         with open(f"./responses/{DB_PROFILE}.txt", "a", encoding="utf-8") as f:
