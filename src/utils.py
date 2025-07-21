@@ -62,7 +62,7 @@ def get_db_profile(chroma_client: chromadb.PersistentClient) -> str:
         else:
             dbProfile = choice.strip()
 
-    return dbProfile
+    return f"{dbProfile}-{EMBEDDING_MODEL.replace('/', '-')}"
 
 
 def get_pixels_path(folder):

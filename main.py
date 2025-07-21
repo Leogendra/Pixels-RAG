@@ -44,7 +44,7 @@ def truncate_entries(entries: list, enc: encoding_for_model, budget: int) -> str
     return "\n".join(selected_tokens)
 
 
-def request_with_retry(**kwargs):
+def request_with_retry(**kwargs) -> dict:
     backoff = 1
     while True:
         try:
@@ -99,7 +99,10 @@ def infer_with_model(prompt: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": full_query},
         ])
-        return response.choices[0].message.content if response.choices else "No response from OpenAI"
+        if response.choices:
+            return response.choices[0].message.content.replace("\n", " ").strip()
+        else:
+            return "No response from OpenAI"
     else:
         prompt_text = f"{system_prompt}\n\n{full_query}"
         try:
@@ -110,13 +113,13 @@ def infer_with_model(prompt: str) -> str:
                 do_sample=True,
                 top_p=0.9,
             )
-            return output[0]["generated_text"][len(prompt_text):].strip()
+            return output[0]["generated_text"][len(prompt_text):].replace("\n", " ").strip()
         except Exception as e:
             logger.error(f"Error during local generation: {e}")
             return "Error with local model"
 
 
-def prompt_model():
+def prompt_model() -> None:
     os.makedirs("./responses", exist_ok=True)
 
     while True:
@@ -125,7 +128,7 @@ def prompt_model():
             print("Exiting...")
             return
 
-        response = infer_with_model(prompt).replace("\n", " ")
+        response = infer_with_model(prompt)
         with open(f"./responses/{DB_PROFILE}.txt", "a", encoding="utf-8") as f:
             f.write(f"Prompt: {prompt}\nResponse: {response}\n\n")
 
