@@ -23,7 +23,6 @@ def compute_embeddings(texts_list):
         if not all(isinstance(x, str) and x.strip() for x in texts_list):
             raise ValueError("Each input must be a non-empty string")
         
-
         client = OpenAI(api_key=OPENAI_API_KEY)
         result = client.embeddings.create(input=texts_list, model=EMBEDDING_MODEL)
         return [res.embedding for res in result.data]
@@ -42,8 +41,9 @@ def compute_embeddings(texts_list):
 
 
 def get_db_profile(chroma_client: chromadb.PersistentClient) -> str:
+    cleanedEmbeddingName = EMBEDDING_MODEL.replace('/', '-')
     existing_collections = chroma_client.list_collections()
-    db_profiles = [collection.name.replace("pixels-rag-", "") for collection in existing_collections if (collection.name.startswith("pixels-rag-") and EMBEDDING_MODEL.replace('/', '-') in collection.name)]
+    db_profiles = [collection.name.replace("pixels-rag-", "") for collection in existing_collections if (collection.name.startswith("pixels-rag-") and cleanedEmbeddingName in collection.name)]
     print(f"Current embedding model: {EMBEDDING_MODEL}")
 
     if not(db_profiles):
@@ -51,7 +51,7 @@ def get_db_profile(chroma_client: chromadb.PersistentClient) -> str:
     else:
         print("Available profiles:")
         for i, profile in enumerate(db_profiles):
-            print(f"{i + 1}. {profile.strip()}")
+            print(f"{i + 1}. {profile.replace(f"-{cleanedEmbeddingName}", "")}")
 
         choice = input("Select a profile by number or enter a new name: ")
         if ("del" in choice.lower()):
@@ -69,7 +69,7 @@ def get_db_profile(chroma_client: chromadb.PersistentClient) -> str:
         else:
             dbProfile = choice.strip()
 
-    return f"{dbProfile}-{EMBEDDING_MODEL.replace('/', '-')}"
+    return f"{dbProfile}-{cleanedEmbeddingName}"
 
 
 def get_pixels_path(folder):
